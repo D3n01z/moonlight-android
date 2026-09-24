@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string-array name="ptt_mode_names">
+        <item>@string/ptt_mode_hold</item>
+        <item>@string/ptt_mode_toggle</item>
+    </string-array>
+
+    <string-array name="ptt_mode_values" translatable="false">
+        <item>hold</item>
+        <item>toggle</item>
+    </string-array>
+
     <string-array name="resolution_names">
         <item>@string/resolution_360p</item>
         <item>@string/resolution_480p</item>

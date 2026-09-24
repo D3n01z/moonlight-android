@@ -83,6 +83,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.PersistableBundle;
+import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Rational;
@@ -103,6 +104,7 @@ import android.view.ViewParent;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -234,6 +236,16 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     private MediaCodecDecoderRenderer decoderRenderer;
     private boolean reportedCrash;
     private MicrophoneCaptureManager microphoneCaptureManager;
+    private ImageView micStatusOverlayView;
+    private TextView micModeLabelView;
+
+    // Session-local PTT state. Initialized from prefConfig.enablePtt at stream start, but can be
+    // flipped live in-game (see PTT_MODE_TOGGLE_TAP_COUNT) without touching the saved preference.
+    private boolean effectivePttEnabled;
+    private int pttTapCount;
+    private long pttFirstTapTime;
+    private static final int PTT_MODE_TOGGLE_TAP_COUNT = 3;
+    private static final long PTT_MODE_TOGGLE_WINDOW_MS = 700;
 
     private WifiManager.WifiLock highPerfWifiLock;
     private WifiManager.WifiLock lowLatencyWifiLock;
@@ -524,6 +536,17 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         performanceOverlayLite = findViewById(R.id.performanceOverlayLite);
 
         performanceOverlayBig = findViewById(R.id.performanceOverlayBig);
+
+        micStatusOverlayView = findViewById(R.id.micStatusOverlay);
+        micModeLabelView = findViewById(R.id.micModeLabel);
+
+        micStatusOverlayView.setOnClickListener(v -> {
+            if (microphoneCaptureManager != null) {
+                microphoneCaptureManager.setTransmitting(!microphoneCaptureManager.isTransmitting());
+                updateMicStatusOverlay();
+            }
+        });
+        micModeLabelView.setOnClickListener(v -> togglePttMode());
 
         inputCaptureProvider = InputCaptureManager.getInputCaptureProvider(this, this);
 
@@ -2047,6 +2070,27 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public boolean handleKeyDown(KeyEvent event) {
+        // The push-to-talk button is handled before any other input processing, so it's never
+        // also interpreted as a game input by the controller or keyboard handlers.
+        if (hasPttButtonBound() && isPttButtonEvent(event)) {
+            if (event.getRepeatCount() == 0 && microphoneCaptureManager != null) {
+                if (checkForPttModeToggleGesture(event)) {
+                    return true;
+                }
+
+                if (effectivePttEnabled && "hold".equals(prefConfig.pttMode)) {
+                    microphoneCaptureManager.setTransmitting(true);
+                }
+                else {
+                    // PTT-toggle mode, or continuous mode (where a tap still mutes/unmutes
+                    // as a convenience rather than being entirely inert).
+                    microphoneCaptureManager.setTransmitting(!microphoneCaptureManager.isTransmitting());
+                }
+                updateMicStatusOverlay();
+            }
+            return true;
+        }
+
         // Pass-through virtual navigation keys
         if ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) != 0) {
             return false;
@@ -2138,6 +2182,16 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     @Override
     public boolean handleKeyUp(KeyEvent event) {
+        if (hasPttButtonBound() && isPttButtonEvent(event)) {
+            // Only hold-mode releases mute on button-up; toggle mode and continuous mode
+            // are unaffected by the release (state already handled on button-down).
+            if (effectivePttEnabled && "hold".equals(prefConfig.pttMode) && microphoneCaptureManager != null) {
+                microphoneCaptureManager.setTransmitting(false);
+                updateMicStatusOverlay();
+            }
+            return true;
+        }
+
         // Pass-through virtual navigation keys
         if ((event.getFlags() & KeyEvent.FLAG_VIRTUAL_HARD_KEY) != 0) {
             return false;
@@ -3493,6 +3547,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         if (microphoneCaptureManager != null) {
             microphoneCaptureManager.stop();
         }
+        updateMicStatusOverlay();
     }
 
     private void startMicrophoneCapture() {
@@ -3522,6 +3577,112 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         if (!microphoneCaptureManager.startStreaming(prefConfig.microphoneDeviceId, null)) {
             LimeLog.warning("Unable to start local microphone capture for the current stream");
             displayTransientMessage(getString(R.string.microphone_stream_start_failed));
+            return;
+        }
+
+        effectivePttEnabled = prefConfig.enablePtt;
+        pttTapCount = 0;
+
+        // In push-to-talk mode, the mic stays open but muted until the bound button is held
+        if (effectivePttEnabled) {
+            microphoneCaptureManager.setTransmitting(false);
+        }
+
+        updateMicStatusOverlay();
+    }
+
+    /**
+     * Returns true if a push-to-talk button has been bound in settings, regardless of whether
+     * push-to-talk is the currently active mode (continuous mode can still be live-toggled back
+     * into push-to-talk with the same button via {@link #checkForPttModeToggleGesture}).
+     */
+    private boolean hasPttButtonBound() {
+        return prefConfig.enableMicrophone &&
+                (prefConfig.pttKeyCode != KeyEvent.KEYCODE_UNKNOWN || prefConfig.pttScanCode != 0);
+    }
+
+    /**
+     * Returns true if this event's button/key matches the configured push-to-talk binding.
+     * Matches by normalized keyCode when Android was able to map one; falls back to the raw
+     * scan code for buttons (e.g. some controller back paddles) that Android reports as
+     * KEYCODE_UNKNOWN.
+     */
+    private boolean isPttButtonEvent(KeyEvent event) {
+        if (prefConfig.pttKeyCode != KeyEvent.KEYCODE_UNKNOWN) {
+            return event.getKeyCode() == prefConfig.pttKeyCode;
+        }
+        return prefConfig.pttScanCode != 0 && event.getScanCode() == prefConfig.pttScanCode;
+    }
+
+    /**
+     * Detects 3 quick presses of the PTT button and uses that as an in-game gesture to flip
+     * between push-to-talk and continuous microphone mode, without needing to leave the game
+     * to change the setting. Returns true if this press completed the gesture (and was consumed
+     * by it), false if it should fall through to normal PTT button-down handling.
+     */
+    private boolean checkForPttModeToggleGesture(KeyEvent event) {
+        long now = event.getEventTime();
+
+        if (now - pttFirstTapTime > PTT_MODE_TOGGLE_WINDOW_MS) {
+            pttTapCount = 0;
+            pttFirstTapTime = now;
+        }
+        pttTapCount++;
+
+        if (pttTapCount < PTT_MODE_TOGGLE_TAP_COUNT) {
+            return false;
+        }
+
+        pttTapCount = 0;
+        togglePttMode();
+        return true;
+    }
+
+    /**
+     * Flips between push-to-talk and continuous microphone mode, whether triggered by the
+     * in-game triple-tap gesture on the bound button or by tapping the mode label overlay.
+     */
+    private void togglePttMode() {
+        effectivePttEnabled = !effectivePttEnabled;
+
+        if (microphoneCaptureManager != null) {
+            // Entering PTT: mute until the button is held. Entering continuous: unmute now.
+            microphoneCaptureManager.setTransmitting(!effectivePttEnabled);
+        }
+        updateMicStatusOverlay();
+
+        displayTransientMessage(getString(effectivePttEnabled ?
+                R.string.ptt_mode_switched_to_ptt : R.string.ptt_mode_switched_to_continuous));
+    }
+
+    private void updateMicStatusOverlay() {
+        boolean micActive = microphoneCaptureManager != null &&
+                prefConfig.enableMicrophone &&
+                MoonBridge.isMicrophoneStreamActive();
+        boolean show = prefConfig.showMicOverlay && micActive;
+
+        if (micStatusOverlayView != null) {
+            if (!show) {
+                micStatusOverlayView.setVisibility(View.GONE);
+            }
+            else {
+                boolean transmitting = microphoneCaptureManager.isTransmitting();
+                micStatusOverlayView.setImageResource(transmitting ? R.drawable.ic_mic_on : R.drawable.ic_mic_muted);
+                micStatusOverlayView.setContentDescription(getString(transmitting ?
+                        R.string.mic_overlay_on : R.string.mic_overlay_muted));
+                micStatusOverlayView.setVisibility(View.VISIBLE);
+            }
+        }
+
+        if (micModeLabelView != null) {
+            if (!show) {
+                micModeLabelView.setVisibility(View.GONE);
+            }
+            else {
+                micModeLabelView.setText(getString(effectivePttEnabled ?
+                        R.string.mic_mode_label_ptt : R.string.mic_mode_label_continuous));
+                micModeLabelView.setVisibility(View.VISIBLE);
+            }
         }
     }
 

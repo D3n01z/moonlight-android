@@ -253,6 +253,40 @@
             android:key="microphone_preview"
             android:title="@string/title_microphone_preview"
             app:iconSpaceReserved="false" />
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:dependency="checkbox_enable_microphone"
+            android:key="checkbox_enable_ptt"
+            android:summary="@string/summary_checkbox_enable_ptt"
+            android:title="@string/title_checkbox_enable_ptt"
+            app:iconSpaceReserved="false" />
+        <Preference
+            android:dependency="checkbox_enable_ptt"
+            android:key="ptt_button_binding"
+            android:summary="@string/summary_ptt_button_binding_unset"
+            android:title="@string/title_ptt_button_binding"
+            app:iconSpaceReserved="false" />
+        <Preference
+            android:dependency="checkbox_enable_ptt"
+            android:key="ptt_button_binding_clear"
+            android:title="@string/title_ptt_button_binding_clear"
+            app:iconSpaceReserved="false" />
+        <ListPreference
+            android:defaultValue="hold"
+            android:dependency="checkbox_enable_ptt"
+            android:entries="@array/ptt_mode_names"
+            android:entryValues="@array/ptt_mode_values"
+            android:key="list_ptt_mode"
+            android:summary="@string/summary_ptt_mode_list"
+            android:title="@string/title_ptt_mode_list"
+            app:iconSpaceReserved="false" />
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:dependency="checkbox_enable_microphone"
+            android:key="checkbox_show_mic_overlay"
+            android:summary="@string/summary_checkbox_show_mic_overlay"
+            android:title="@string/title_checkbox_show_mic_overlay"
+            app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory

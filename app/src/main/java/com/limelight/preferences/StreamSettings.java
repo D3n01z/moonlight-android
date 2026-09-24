@@ -37,6 +37,7 @@ import android.util.Log;
 import android.util.Range;
 import android.view.Display;
 import android.view.DisplayCutout;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -72,6 +73,32 @@ public class StreamSettings extends AppCompatActivity {
     private int previousDisplayPixelCount;
 
     private SettingsFragment prefsFragment;
+
+    /**
+     * Lets a preference temporarily steal the next KeyEvent (e.g. to bind a controller
+     * button), instead of it being dispatched to the focused view as normal.
+     */
+    public interface KeyCaptureListener {
+        // Return true if this event was consumed as the capture, ending capture mode.
+        boolean onKeyCaptured(KeyEvent event);
+    }
+
+    private KeyCaptureListener keyCaptureListener;
+
+    public void setKeyCaptureListener(KeyCaptureListener listener) {
+        this.keyCaptureListener = listener;
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (keyCaptureListener != null) {
+            if (keyCaptureListener.onKeyCaptured(event)) {
+                keyCaptureListener = null;
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
 
     // HACK for Android 9
     static DisplayCutout displayCutoutP;
@@ -177,6 +204,7 @@ public class StreamSettings extends AppCompatActivity {
         private ListPreference microphoneDevicePreference;
         private MicrophonePreviewPreference microphonePreviewPreference;
         private boolean pendingMicrophoneEnableAfterPermission;
+        private Preference pttBindingPreference;
 
         public SettingsFragment(PreferenceConfiguration prefCfg) {
             prevPrefConfig = prefCfg;
@@ -1034,6 +1062,77 @@ public class StreamSettings extends AppCompatActivity {
                         R.string.microphone_preview_permission_required;
                 microphonePreviewPreference.updatePreviewState(getString(statusResId), 0.0, false);
             }
+
+            initializePttPreference();
+        }
+
+        private void initializePttPreference() {
+            pttBindingPreference = findPreference("ptt_button_binding");
+            if (pttBindingPreference == null) {
+                return;
+            }
+
+            refreshPttBindingSummary();
+
+            pttBindingPreference.setOnPreferenceClickListener(preference -> {
+                pttBindingPreference.setSummary(R.string.summary_ptt_button_binding_waiting);
+
+                ((StreamSettings) requireActivity()).setKeyCaptureListener(event -> {
+                    // Let Back cancel the capture instead of binding it (it's needed for navigation)
+                    if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+                        if (event.getAction() == KeyEvent.ACTION_UP) {
+                            refreshPttBindingSummary();
+                            return true;
+                        }
+                        return false;
+                    }
+
+                    // Only bind on the press, not the release, and ignore auto-repeat
+                    if (event.getAction() != KeyEvent.ACTION_DOWN || event.getRepeatCount() != 0) {
+                        return false;
+                    }
+
+                    getPrefs().edit()
+                            .putInt(PreferenceConfiguration.PTT_KEYCODE_PREF_STRING, event.getKeyCode())
+                            .putInt(PreferenceConfiguration.PTT_SCANCODE_PREF_STRING, event.getScanCode())
+                            .apply();
+                    refreshPttBindingSummary();
+                    return true;
+                });
+
+                return true;
+            });
+
+            Preference clearPreference = findPreference("ptt_button_binding_clear");
+            if (clearPreference != null) {
+                clearPreference.setOnPreferenceClickListener(preference -> {
+                    getPrefs().edit()
+                            .putInt(PreferenceConfiguration.PTT_KEYCODE_PREF_STRING, KeyEvent.KEYCODE_UNKNOWN)
+                            .putInt(PreferenceConfiguration.PTT_SCANCODE_PREF_STRING, 0)
+                            .apply();
+                    refreshPttBindingSummary();
+                    return true;
+                });
+            }
+        }
+
+        private void refreshPttBindingSummary() {
+            if (pttBindingPreference == null) {
+                return;
+            }
+
+            int keyCode = getPrefs().getInt(PreferenceConfiguration.PTT_KEYCODE_PREF_STRING, KeyEvent.KEYCODE_UNKNOWN);
+            int scanCode = getPrefs().getInt(PreferenceConfiguration.PTT_SCANCODE_PREF_STRING, 0);
+
+            if (keyCode == KeyEvent.KEYCODE_UNKNOWN && scanCode == 0) {
+                pttBindingPreference.setSummary(R.string.summary_ptt_button_binding_unset);
+                return;
+            }
+
+            String label = keyCode != KeyEvent.KEYCODE_UNKNOWN ?
+                    KeyEvent.keyCodeToString(keyCode).replace("KEYCODE_", "") :
+                    "scan code " + scanCode;
+            pttBindingPreference.setSummary(getString(R.string.summary_ptt_button_binding_bound, label));
         }
 
         private void populateMicrophoneDevicePreference() {

@@ -238,6 +238,25 @@
     <string name="microphone_host_not_negotiated">Host did not negotiate microphone streaming; leaving client microphone disabled</string>
     <string name="microphone_stream_permission_revoked">Microphone capture skipped because RECORD_AUDIO permission is not granted</string>
     <string name="microphone_stream_start_failed">Unable to start local microphone capture; continuing without microphone input</string>
+    <string name="title_checkbox_enable_ptt">Push-to-talk</string>
+    <string name="summary_checkbox_enable_ptt">Mute the microphone by default; only transmit while the bound button is held.</string>
+    <string name="title_ptt_button_binding">Push-to-talk button</string>
+    <string name="summary_ptt_button_binding_unset">Not set — tap to bind a button</string>
+    <string name="summary_ptt_button_binding_waiting">Press the button you want to use, or Back to cancel…</string>
+    <string name="summary_ptt_button_binding_bound">Bound to: %1$s. Tap to change.</string>
+    <string name="title_ptt_button_binding_clear">Clear push-to-talk button</string>
+    <string name="title_ptt_mode_list">Push-to-talk mode</string>
+    <string name="summary_ptt_mode_list">Hold to talk while the button is held, or toggle the mic on/off with each press</string>
+    <string name="ptt_mode_hold">Hold to talk</string>
+    <string name="ptt_mode_toggle">Toggle on/off</string>
+    <string name="title_checkbox_show_mic_overlay">Show mic status overlay</string>
+    <string name="summary_checkbox_show_mic_overlay">Show a small icon in the corner of the screen while streaming, indicating whether the microphone is currently transmitting</string>
+    <string name="mic_overlay_on">Microphone is transmitting</string>
+    <string name="mic_overlay_muted">Microphone is muted</string>
+    <string name="ptt_mode_switched_to_ptt">Push-to-talk enabled</string>
+    <string name="ptt_mode_switched_to_continuous">Continuous microphone enabled</string>
+    <string name="mic_mode_label_ptt">P</string>
+    <string name="mic_mode_label_continuous">C</string>
 
     <string name="category_gamepad_settings">Gamepad Settings</string>
     <string name="title_checkbox_multi_controller">Automatic gamepad presence detection</string>

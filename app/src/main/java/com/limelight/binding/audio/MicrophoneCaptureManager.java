@@ -57,6 +57,7 @@ public class MicrophoneCaptureManager {
     private AudioRecord audioRecord;
     private Thread captureThread;
     private volatile boolean running;
+    private volatile boolean transmitting = true;
     private boolean streamingToHost;
     private LevelListener levelListener;
     private String currentStatus;
@@ -101,6 +102,19 @@ public class MicrophoneCaptureManager {
 
     public boolean startStreaming(int preferredDeviceId, LevelListener listener) {
         return startCapture(preferredDeviceId, listener, true);
+    }
+
+    /**
+     * Gates whether captured PCM is actually forwarded to the host, without tearing down
+     * and reopening AudioRecord. Used for push-to-talk: the capture stays open and running,
+     * but audio is only sent to the host while the bound button is held.
+     */
+    public void setTransmitting(boolean transmitting) {
+        this.transmitting = transmitting;
+    }
+
+    public boolean isTransmitting() {
+        return transmitting;
     }
 
     public void stop() {
@@ -213,6 +227,7 @@ public class MicrophoneCaptureManager {
         currentLevel = 0.0;
         signalDetected = false;
         running = true;
+        transmitting = true;
 
         if (streamToHost) {
             MoonBridge.startMicrophoneStreaming();
@@ -252,7 +267,7 @@ public class MicrophoneCaptureManager {
                 pendingRms = signalStats.rms;
             }
 
-            if (streamingToHost) {
+            if (streamingToHost && transmitting) {
                 int queued = MoonBridge.queueMicrophonePcm(readBuffer, samplesRead);
                 if (queued < 0) {
                     LimeLog.warning("Failed to queue microphone PCM data for native encoding");

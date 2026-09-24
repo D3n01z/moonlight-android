@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.view.Display;
+import android.view.KeyEvent;
 
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.profiles.ProfilesManager;
@@ -62,6 +63,11 @@ public class PreferenceConfiguration {
     static final String AUDIO_CONFIG_PREF_STRING = "list_audio_config";
     static final String ENABLE_MICROPHONE_PREF_STRING = "checkbox_enable_microphone";
     static final String MICROPHONE_DEVICE_PREF_STRING = "list_microphone_device";
+    static final String ENABLE_PTT_PREF_STRING = "checkbox_enable_ptt";
+    static final String PTT_KEYCODE_PREF_STRING = "ptt_keycode";
+    static final String PTT_SCANCODE_PREF_STRING = "ptt_scancode";
+    static final String PTT_MODE_PREF_STRING = "list_ptt_mode";
+    static final String SHOW_MIC_OVERLAY_PREF_STRING = "checkbox_show_mic_overlay";
     private static final String USB_DRIVER_PREF_SRING = "checkbox_usb_driver";
     private static final String VIDEO_FORMAT_PREF_STRING = "video_format";
     private static final String ONSCREEN_CONTROLLER_PREF_STRING = "checkbox_show_onscreen_controls";
@@ -183,6 +189,11 @@ public class PreferenceConfiguration {
     private static final String DEFAULT_AUDIO_CONFIG = "2"; // Stereo
     private static final boolean DEFAULT_ENABLE_MICROPHONE = false;
     private static final String DEFAULT_MICROPHONE_DEVICE = "0";
+    private static final boolean DEFAULT_ENABLE_PTT = false;
+    private static final int DEFAULT_PTT_KEYCODE = KeyEvent.KEYCODE_UNKNOWN;
+    private static final int DEFAULT_PTT_SCANCODE = 0;
+    private static final String DEFAULT_PTT_MODE = "hold";
+    private static final boolean DEFAULT_SHOW_MIC_OVERLAY = false;
     private static final boolean DEFAULT_LATENCY_TOAST = false;
     private static final String DEFAULT_FRAME_PACING = "latency";
     private static final boolean DEFAULT_ABSOLUTE_MOUSE_MODE = false;
@@ -374,6 +385,11 @@ public class PreferenceConfiguration {
     public MoonBridge.AudioConfiguration audioConfiguration;
     public boolean enableMicrophone;
     public int microphoneDeviceId;
+    public boolean enablePtt;
+    public int pttKeyCode;
+    public int pttScanCode;
+    public String pttMode;
+    public boolean showMicOverlay;
     public int framePacing;
     public boolean absoluteMouseMode;
     public boolean enableAudioFx;
@@ -870,6 +886,12 @@ private static int getFramePacingValue(Context context) {
             config.microphoneDeviceId = 0;
             prefs.edit().putString(MICROPHONE_DEVICE_PREF_STRING, DEFAULT_MICROPHONE_DEVICE).apply();
         }
+
+        config.enablePtt = prefs.getBoolean(ENABLE_PTT_PREF_STRING, DEFAULT_ENABLE_PTT);
+        config.pttKeyCode = prefs.getInt(PTT_KEYCODE_PREF_STRING, DEFAULT_PTT_KEYCODE);
+        config.pttScanCode = prefs.getInt(PTT_SCANCODE_PREF_STRING, DEFAULT_PTT_SCANCODE);
+        config.pttMode = prefs.getString(PTT_MODE_PREF_STRING, DEFAULT_PTT_MODE);
+        config.showMicOverlay = prefs.getBoolean(SHOW_MIC_OVERLAY_PREF_STRING, DEFAULT_SHOW_MIC_OVERLAY);
 
         config.videoScaleMode = getVideoScaleMode(context);
 
